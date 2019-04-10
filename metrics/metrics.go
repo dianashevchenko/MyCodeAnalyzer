@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"strings"
 	//"time"
@@ -13,47 +12,47 @@ import (
 //NOP, LOC, HIT, NOM, CALL, NOC
 //NProtM, NOPA, NOAV
 type DirectMetrics struct {
-	NOP map[string]int //+
-	LOC int            //+
-	NOC  int
-	CALL int            //+
-	NOM  map[string]int //+
-	HIT  float64
-	NOAV int
+	packages map[string]int
+	methods  map[string]int
 
-	NOPA   int //+
-	NProtM int //+
+	NOP      int
+	LOC      int
+	NOC      int
+	CALL     int
+	NOM      int
+	HIT      float64
+	NOAV     int
+	NOPA     int
+	NProtM   int
 }
 
-func Count(files []string) {
+func Count(files []string) DirectMetrics {
 	var dm DirectMetrics
 	dm.count(files)
-	//fmt.Printf("%+v\n", dm)
-	for _, v := range dm.NOM{
-		dm.CALL+=v
+	for _, v := range dm.methods {
+		dm.CALL += v
 	}
-	fmt.Printf("\nNop %v\nLOC %v\nNoc %v\nCall %v\nNoM %v\nHit %v\n" +
+	dm.NOP = len(dm.packages)
+	dm.NOM = len(dm.methods)
+	dm.HIT = dm.HIT / float64(dm.NOC)
+	/*fmt.Printf("\nNop %v\nLOC %v\nNoc %v\nCall %v\nNoM %v\nHit %v\n"+
 		"Noav %v\nNopa %v\nNprotm %v",
-		len(dm.NOP),
+		len(dm.packages),
 		dm.LOC,
 		dm.NOC,
 		dm.CALL,
-		len(dm.NOM),
-		float64(dm.HIT /float64(dm.NOC) ),
+		len(dm.methods),
+		float64(dm.HIT/float64(dm.NOC)),
 		dm.NOAV,
 		dm.NOPA,
 		dm.NProtM,
-	)
-
-
-	//for k, v:= range dm.NOP{
-	//	fmt.Printf("key %v value %v",k, v)
-	//}
+	)*/
+	return dm
 
 }
 func (dm *DirectMetrics) count(files []string) {
-	dm.NOM = make(map[string]int)
-	dm.NOP = make(map[string]int)
+	dm.methods = make(map[string]int)
+	dm.packages = make(map[string]int)
 	for i := range files {
 		file, err := os.Open(files[i])
 		defer file.Close()
@@ -74,7 +73,7 @@ func (dm *DirectMetrics) count(files []string) {
 			//	//time.Sleep(time.Second)
 			//}
 
-			dm.checkForClasses(line )
+			dm.checkForClasses(line)
 			dm.checkForMethods(line)
 			dm.checkForPackages(line)
 
@@ -158,25 +157,25 @@ func (dm *DirectMetrics) checkForMethods(line string) {
 	}
 
 	if strings.Contains(line, "Override") {
-		dm.NOM["Override"]++
+		dm.methods["Override"]++
 	}
 	//time.Sleep(2 * time.Second)
 	ind := strings.Index(line, "(")
-	if ind != -1{
+	if ind != -1 {
 		line = string(line[:ind])
 	}
-	line= strings.Trim(line, "\t .};")
+	line = strings.Trim(line, "\t .};")
 	arr := strings.Split(line, " ")
 	//fmt.Print(arr)
 
-	dm.NOM[arr[len(arr)-1]]++
+	dm.methods[arr[len(arr)-1]]++
 
 }
 
 func (dm *DirectMetrics) checkForPackages(line string) {
 
 	if strings.Contains(line, "package") {
-		dm.NOP[line]++
+		dm.packages[line]++
 		return
 	}
 
