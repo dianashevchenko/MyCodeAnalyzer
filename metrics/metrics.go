@@ -2,8 +2,11 @@ package metrics
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
+	"time"
+
 	//"time"
 
 	//"time"
@@ -11,172 +14,263 @@ import (
 
 //NOP, LOC, HIT, NOM, CALL, NOC
 //NProtM, NOPA, NOAV
-type DirectMetrics struct {
-	packages map[string]int
-	methods  map[string]int
+type Metrics struct {
+	packages          map[string]int
+	methods           map[string]int
+	variables         map[string]int
+	variablesInMethod map[string]int
 
-	NOP      int
-	LOC      int
-	NOC      int
-	CALL     int
-	NOM      int
-	HIT      float64
-	NOAV     int
-	NOPA     int
-	NProtM   int
+	NOP    int
+	LOC    int
+	NOC    int
+	CALL   int
+	NOM    int
+	HIT    float64
+	NOAV   int
+	NOPA   int
+	NProtM int
 }
 
-func Count(files []string) DirectMetrics {
-	var dm DirectMetrics
+//var notAllowed = []string{
+//	"abstract", "assert", "boolean", "break",
+//	"byte", "case", "catch", "char",
+//	"class", "const", "continue", "default",
+//	"do", "double", "else", "enum",
+//	"extends", "final", "finally", "float",
+//	"for", "goto", "if", "implements",
+//	"import", "instanceof", "int", "interface",
+//	"long", "native", "new", "package",
+//	"private", "protected", "public", "return",
+//	"short", "static", "strictfp", "super",
+//	"switch", "synchronized", "this", "throw",
+//	"throws", "transient", "try", "void",
+//	"volatile", "while", "true", "false",
+//	"null",
+//}
+
+var currentMethod = ""
+var bracketCount = 0
+var totalVariables = 0
+var previousLine = " "
+
+func Count(files []string) Metrics {
+	var dm Metrics
 	dm.count(files)
 	for _, v := range dm.methods {
-		dm.CALL += v
+		dm.CALL += v - 1
 	}
+	//fmt.Printf("HIT + %v", (dm.HIT))
 	dm.NOP = len(dm.packages)
 	dm.NOM = len(dm.methods)
 	dm.HIT = dm.HIT / float64(dm.NOC)
-	/*fmt.Printf("\nNop %v\nLOC %v\nNoc %v\nCall %v\nNoM %v\nHit %v\n"+
+	dm.NOAV = 0
+	totalVariables = dm.variablesInMethod[""]
+	delete(dm.variablesInMethod, "")
+	delete(dm.variablesInMethod, "apply")
+	delete(dm.variablesInMethod, "compare")
+	for _, v := range dm.variablesInMethod {
+
+		//time.Sleep(time.Second)
+		//fmt.Println("Noav + "+ string(v))
+		if dm.NOAV < v {
+			//fmt.Printf("%v\n", k)
+			//fmt.Printf("NOAV = %v  v = %v\n", dm.NOAV, v)
+			dm.NOAV = v
+		}
+		//dm.NOAV += v - 1
+	}
+
+	fmt.Printf("\nNop %v\nLOC %v\nNoc %v\nCall %v\nNoM %v\nHit %v\n"+
 		"Noav %v\nNopa %v\nNprotm %v",
 		len(dm.packages),
 		dm.LOC,
 		dm.NOC,
 		dm.CALL,
-		len(dm.methods),
-		float64(dm.HIT/float64(dm.NOC)),
+		dm.NOM,
+		float64(dm.HIT),
 		dm.NOAV,
 		dm.NOPA,
 		dm.NProtM,
-	)*/
+	)
 	return dm
 
 }
-func (dm *DirectMetrics) count(files []string) {
+func (dm *Metrics) count(files []string) {
 	dm.methods = make(map[string]int)
 	dm.packages = make(map[string]int)
+	dm.variables = make(map[string]int)
+	dm.variablesInMethod = make(map[string]int)
+
 	for i := range files {
 		file, err := os.Open(files[i])
-		defer file.Close()
-
 		if err != nil {
 			panic(err)
 		}
 
+		isComment := false
 		scanner := bufio.NewScanner(file)
-		//isComment := false
+
 		for scanner.Scan() {
 			line := scanner.Text()
-
-			dm.LOC++
-			//if dm.isComment(line, &isComment){
-			//	//fmt.Println(line)
-			//	continue
-			//	//time.Sleep(time.Second)
+			//if containsAnd(line, "compare"){
+			//	fmt.Println(files[i])
+			//	time.Sleep(time.Second*2)
 			//}
 
-			dm.checkForClasses(line)
-			dm.checkForMethods(line)
-			dm.checkForPackages(line)
-
+			line = strings.TrimSpace(line)
+			line = strings.Trim(line, "\t")
+			if len(line) ==0 || dm.isComment(line, &isComment) {
+				continue
+			}
+			if containsAnd(line, "{") && len(line) ==1{
+				line = previousLine + "{"
+			}
+			dm.LOC++
+			dm.runChecks(line)
+			previousLine = line
+			_ = file.Close()
 		}
 	}
 
 }
-func (dm *DirectMetrics) isComment(line string, isComment *bool) bool {
+func (dm *Metrics) isComment(line string, isComment *bool) bool {
 
 	if strings.Contains(line, `//`) {
-		return true
-	}
-	if strings.Contains(line, `/*`) && strings.Contains(line, `*/`) {
-		*isComment = false
-		return false
-	}
-	if strings.Contains(line, `/*`) {
-		*isComment = true
 		return true
 	}
 	if strings.Contains(line, `*/`) {
 		*isComment = false
 		return true
 	}
+	if strings.Contains(line, `/*`) {
+		*isComment = true
+		return true
+	}
 	if *isComment == true {
-
 		return true
 	}
 	return false
 }
+func (dm *Metrics) runChecks(line string) {
 
-/*func (dm *DirectMetrics) checkForClasses(line string) {
-	if strings.Contains(line, "class") {
-		arr := strings.Split(line, " ")
-		for i, v := range arr {
-			if v == "class" {
+	dm.checkForClasses(line)
 
-				if len(dm.NOC[arr[i+1]]) == 0 {
+	dm.checkForPackages(line)
 
-				}
-				dm.NOC = make(map[string][]string)
-				dm.NOC[arr[i+1]] = []string{}
-				i++
-			}
-			if v == "extends" {
-				dm.NOC[arr[i+1]] = append(dm.NOC[arr[i+1]], arr[i-1])
-				i++
-			}
-		}
-	}
-}*/
+	dm.checkForMethods(line)
 
-func (dm *DirectMetrics) checkForClasses(line string) {
+}
+
+func (dm *Metrics) checkForClasses(line string) bool {
 	if strings.Contains(line, "extends") {
 		dm.HIT++
 	}
 	if strings.Contains(line, "class") && !strings.Contains(line, ".class") {
 		dm.NOC++
-	}
-}
-func (dm *DirectMetrics) checkForMethods(line string) {
-	if strings.Contains(line, "class") ||
-		strings.Contains(line, "extends") ||
-		strings.Contains(line, "package") ||
-		strings.Contains(line, "import") ||
-		strings.Contains(line, "interface") {
-		return
-	}
-	if strings.Contains(line, "private") || strings.Contains(line, "protected") {
-		dm.NProtM++
-		//fmt.Println(line)
-		//time.Sleep(time.Second)
-	}
-	if strings.Contains(line, "public") || strings.Contains(line, "static") {
-		dm.NOPA++
-	}
-	if strings.Contains(line, "=") ||
-		!strings.Contains(line, "(") ||
-		strings.Contains(line, ";") && !strings.Contains(line, "{") {
-		return
-	}
 
-	if strings.Contains(line, "Override") {
-		dm.methods["Override"]++
 	}
-	//time.Sleep(2 * time.Second)
-	ind := strings.Index(line, "(")
-	if ind != -1 {
-		line = string(line[:ind])
-	}
-	line = strings.Trim(line, "\t .};")
-	arr := strings.Split(line, " ")
-	//fmt.Print(arr)
-
-	dm.methods[arr[len(arr)-1]]++
-
+	return true
 }
 
-func (dm *DirectMetrics) checkForPackages(line string) {
+func (dm *Metrics) checkForMethods(line string) bool {
+	if containsOr(line, "import", "interface") {
+		return false
+	}
+
+
+
+	//assume it is a method
+	if containsAnd(line, "{", "(") && !containsOr(line, "throws", "=", "new", "this", "while", "if",
+		"switch", "for") {
+		bracketCount += strings.Count(line, "{")
+		bracketCount -= strings.Count(line, "}")
+
+
+		vars := strings.Split(line, " ")
+
+		//is it a constructor?
+
+		for i, v := range vars {
+			if containsAnd(v, "(") {
+				if i == 1 {
+					dm.CALL++
+					return false
+
+				}
+				ind := strings.Index(v, "(")
+				currentMethod = v[:ind]
+
+			}
+
+		}
+		if containsOr(line, "private", "protected") {
+			dm.NProtM++
+		}
+		dm.methods[currentMethod]++
+		if containsAnd(line, "()") {
+			//there are no input parameters
+
+		} else {
+			dm.variablesInMethod[currentMethod] += strings.Count(line, ",") + 1
+		}
+		return true
+	}
+
+	//there is some assignment => not a method
+	if containsAnd(line, "=") && !containsAnd(line, "==", "!=", ) {
+		vars := strings.Split(line, " ")
+		for i, v := range vars {
+			if v == "=" {
+				var variable string
+				if containsAnd(vars[i-1], ".") {
+					variable = vars[i-1][:strings.Index(vars[i-1], ".")]
+				}
+				if dm.variables[variable] == 0 {
+					dm.variables[variable]++
+					dm.variablesInMethod[currentMethod]++
+				}
+
+			}
+		}
+		if containsOr(line, "public", "static") {
+			dm.NOPA++
+		}
+		return false
+	}
+
+	if bracketCount == 0 {
+		currentMethod = ""
+	}
+
+	return true
+}
+
+func (dm *Metrics) checkForPackages(line string) bool {
 
 	if strings.Contains(line, "package") {
 		dm.packages[line]++
-		return
+		return true
 	}
+	return false
+}
 
+func containsAnd(haystack string, needle ...string) bool {
+	for _, v := range needle {
+		if !strings.Contains(haystack, v) {
+			return false
+		}
+	}
+	return true
+}
+func containsOr(haystack string, needle ...string) bool {
+	for _, v := range needle {
+		if strings.Contains(haystack, v) {
+			return true
+		}
+	}
+	return false
+}
+
+func sleep2() {
+	time.Sleep(time.Second * 2)
 }
