@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"time"
 )
 
 func main() {
@@ -22,8 +21,8 @@ func main() {
 
 	result := metrics.Count(files)
 	data, err := json.MarshalIndent(result, "", " ")
-
-	resultDir := project + "/result"
+///metricsAnalyzer/result.json
+	resultDir := project + "/metricsAnalyzer"
 	_ = os.Mkdir(resultDir, 0755)
 	f, err := os.Create(resultDir + "/result.json")
 	if err != nil {
@@ -35,7 +34,7 @@ func main() {
 		fmt.Println(err)
 		//panic(err)
 	}
-	defer time.Sleep(10 * time.Second)
+	//defer time.Sleep(10 * time.Second)
 }
 
 /*
