@@ -2,12 +2,16 @@ package metrics
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 )
 
 //NOP, LOC, HIT, NOM, CALL, NOC
 //NProtM, NOPA, NOAV
+type Files struct {
+	files []string
+}
 type Metrics struct {
 	packages          map[string]int
 	methods           map[string]int
@@ -37,25 +41,25 @@ var currentClass = ""
 var bracketCount = 0
 var previousLine = " "
 
-func Count(files []string) Metrics {
+func Count(files []string) (Metrics, string) {
 	var dm Metrics
 	dm.count(files)
 	dm.Setting()
-	//fmt.Printf("\nNop %v\nLOC %v\nNoc %v\nCall %v\nNoM %v\nHit %v\n"+
-	//	"Noav %v\nNopa %v\nNprotm %v",
-	//	len(dm.packages),
-	//	dm.LOC,
-	//	dm.NOC,
-	//	dm.CALL,
-	//	dm.NOM,
-	//	float64(dm.HIT),
-	//	dm.NOAV,
-	//	dm.NOPA,
-	//	dm.NProtM,
-	//)
-	return dm
+	res := fmt.Sprintf("%v\r\n%v\r\n%v\r\n%v\r\n%v\r\n%.3f\r\n%v\r\n%v\r\n%v",
+		dm.NOP,
+		dm.LOC,
+		dm.NOC,
+		dm.CALL,
+		dm.NOM,
+		float64(dm.HIT),
+		dm.NOAV,
+		dm.NOPA,
+		dm.NProtM,
+	)
+	return dm, res
 
 }
+
 func (dm *Metrics) Setting() {
 	for _, v := range dm.methods {
 		dm.CALL += v - 1
@@ -93,7 +97,8 @@ func (dm *Metrics) count(files []string) {
 	dm.public = make(map[string]int)
 	dm.variables = make(map[string]int)
 	dm.variablesInMethod = make(map[string]int)
-
+	var fl Files
+	fl.files = files;
 	for i := range files {
 		file, err := os.Open(files[i])
 		if err != nil {
@@ -115,9 +120,10 @@ func (dm *Metrics) count(files []string) {
 				line = previousLine + "{"
 			}
 			dm.LOC++
-			dm.runChecks(line)
+			dm.runChecks(line, files[i])
 			previousLine = line
 			_ = file.Close()
+			defer fmt.Println(files[i])
 		}
 	}
 
@@ -137,17 +143,18 @@ func (dm *Metrics) isComment(line string, isComment *bool) bool {
 	}
 	return false
 }
-func (dm *Metrics) runChecks(line string) {
+func (dm *Metrics) runChecks(line, file string) {
 
-	dm.checkForClasses(line)
+	dm.checkForClasses(line, file)
 
-	dm.checkForPackages(line)
+	dm.checkForPackages(line, file)
+	dm.checkForVars(line, file)
 
-	dm.checkForMethods(line)
+	dm.checkForMethods(line, file)
 
 }
 
-func (dm *Metrics) checkForClasses(line string) bool {
+func (dm *Metrics) checkForClasses(line, file string) bool {
 	if strings.Contains(line, "extends") {
 		dm.HIT++
 	}
@@ -156,14 +163,17 @@ func (dm *Metrics) checkForClasses(line string) bool {
 		vars := strings.Split(line, " ")
 		for i, v := range vars {
 			if v == "class" {
-				currentClass = vars[i+1]
+				if i+1 < len(vars){
+					currentClass = vars[i+1]
+				}
+
 			}
 		}
 	}
 	return true
 }
 
-func (dm *Metrics) checkForMethods(line string) bool {
+func (dm *Metrics) checkForMethods(line, file string) bool {
 	if containsOr(line, "import", "interface") {
 		return false
 	}
@@ -197,13 +207,21 @@ func (dm *Metrics) checkForMethods(line string) bool {
 		return true
 	}
 
+
+	if bracketCount == 0 {
+		currentMethod = ""
+	}
+
+	return true
+}
+func (dm *Metrics) checkForVars(line, file string)  {
 	//assignment present => not a method
 	if containsAnd(line, assign) && !containsAnd(line, equal, notEqual, ) {
 		vars := strings.Split(line, " ")
 		for i, v := range vars {
 			if v == assign {
 				var variable string
-				if containsAnd(vars[i-1], ".") {
+				if i-1>=0 && containsAnd(vars[i-1], ".") {
 					variable = vars[i-1][:strings.Index(vars[i-1], ".")]
 				}
 				if dm.variables[variable] == 0 {
@@ -216,17 +234,12 @@ func (dm *Metrics) checkForMethods(line string) bool {
 			dm.public[currentClass]++
 		}
 		dm.methods[currentMethod]++
-		return false
+
 	}
 
-	if bracketCount == 0 {
-		currentMethod = ""
-	}
 
-	return true
 }
-
-func (dm *Metrics) checkForPackages(line string) bool {
+func (dm *Metrics) checkForPackages(line, file string) bool {
 
 	if strings.Contains(line, "package") {
 		dm.packages[line]++

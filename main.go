@@ -19,7 +19,7 @@ func main() {
 		fmt.Println(err)
 	}
 
-	result := metrics.Count(files)
+	result, str := metrics.Count(files)
 	data, err := json.MarshalIndent(result, "", " ")
 ///metricsAnalyzer/result.json
 	resultDir := project + "/metricsAnalyzer"
@@ -34,6 +34,16 @@ func main() {
 		fmt.Println(err)
 		//panic(err)
 	}
+	f.Close()
+	f, err = os.Create(resultDir + "/result.txt")
+
+	_, err = f.Write([]byte(str))
+	if err != nil {
+		fmt.Println(err)
+		//panic(err)
+	}
+	f.Close()
+
 	//defer time.Sleep(10 * time.Second)
 }
 

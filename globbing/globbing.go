@@ -21,7 +21,7 @@ func GetFiles(project string ) ([]string, error){
 }
 
 func isJava(path string) bool{
-	if filepath.Ext(path) == ".java"{
+	if filepath.Ext(path) == ".java" && filepath.Dir(path) != "doc"{
 		return true
 	}
 	return false
